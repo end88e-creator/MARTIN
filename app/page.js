@@ -5,6 +5,7 @@ import { useState } from "react";
 export default function Home() {
   const [name, setName] = useState("");
   const [step, setStep] = useState("name");
+  const [role, setRole] = useState("");
 
   function enter() {
     if (!name.trim()) {
@@ -13,6 +14,11 @@ export default function Home() {
     }
 
     setStep("role");
+  }
+
+  function requestJoin(selectedRole) {
+    setRole(selectedRole);
+    setStep("waiting");
   }
 
   return (
@@ -36,12 +42,7 @@ export default function Home() {
           textAlign: "center",
         }}
       >
-        <h1
-          style={{
-            fontSize: "58px",
-            margin: "0 0 10px",
-          }}
-        >
+        <h1 style={{ fontSize: "58px", margin: "0 0 10px" }}>
           MARTIN
         </h1>
 
@@ -97,6 +98,7 @@ export default function Home() {
             </h2>
 
             <button
+              onClick={() => requestJoin("لاعب")}
               style={{
                 width: "100%",
                 padding: "18px",
@@ -112,6 +114,7 @@ export default function Home() {
             </button>
 
             <button
+              onClick={() => requestJoin("متفرج")}
               style={{
                 width: "100%",
                 padding: "18px",
@@ -125,6 +128,42 @@ export default function Home() {
             >
               👁️ متفرج
             </button>
+          </>
+        )}
+
+        {step === "waiting" && (
+          <>
+            <div style={{ fontSize: "50px", margin: "30px 0 20px" }}>
+              ⏳
+            </div>
+
+            <h2 style={{ marginBottom: "12px" }}>
+              طلبك وصل إلى MARTIN
+            </h2>
+
+            <p
+              style={{
+                color: "#999",
+                lineHeight: "1.8",
+                marginBottom: "25px",
+              }}
+            >
+              أهلًا {name}، طلبت الدخول كـ {role}.
+              <br />
+              بانتظار موافقة المضيف...
+            </p>
+
+            <div
+              style={{
+                padding: "14px",
+                border: "1px solid #222",
+                background: "#0d0d0d",
+                borderRadius: "12px",
+                color: "#777",
+              }}
+            >
+              لا تقفل الصفحة، MARTIN بيرجع لك هنا.
+            </div>
           </>
         )}
       </div>
