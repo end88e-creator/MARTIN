@@ -1,26 +1,96 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+);
 
 export default function OwnerPage() {
-  const [players, setPlayers] = useState([
-    { id: 1, name: "محمد", role: "لاعب", status: "بانتظار الموافقة" },
-  ]);
+  const [players, setPlayers] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  function approve(id) {
-    setPlayers((current) =>
-      current.map((player) =>
-        player.id === id
-          ? { ...player, status: "تمت الموافقة" }
-          : player
-      )
-    );
+  async function loadRequests() {
+    const { data, error } = await supabase
+      .from("join_requests")
+      .select("*")
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("MARTIN:", error);
+      setLoading(false);
+      return;
+    }
+
+    setPlayers(data || []);
+    setLoading(false);
   }
 
-  function reject(id) {
-    setPlayers((current) =>
-      current.filter((player) => player.id !== id)
-    );
+  useEffect(() => {
+    loadRequests();
+
+    const channel = supabase
+      .channel("martin-join-requests")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "join_requests",
+        },
+        () => {
+          loadRequests();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  async function approve(id) {
+    const { error } = await supabase
+      .from("join_requests")
+      .update({ status: "approved" })
+      .eq("id", id);
+
+    if (error) {
+      alert("صار خطأ أثناء الموافقة");
+      console.error(error);
+      return;
+    }
+
+    loadRequests();
+  }
+
+  async function reject(id) {
+    const { error } = await supabase
+      .from("join_requests")
+      .update({ status: "rejected" })
+      .eq("id", id);
+
+    if (error) {
+      alert("صار خطأ أثناء الرفض");
+      console.error(error);
+      return;
+    }
+
+    loadRequests();
+  }
+
+  function statusText(status) {
+    if (status === "approved") return "تمت الموافقة";
+    if (status === "rejected") return "مرفوض";
+    return "بانتظار الموافقة";
+  }
+
+  function roleText(role) {
+    if (role === "player") return "لاعب";
+    if (role === "spectator") return "متفرج";
+    return role;
   }
 
   return (
@@ -35,19 +105,29 @@ export default function OwnerPage() {
       }}
     >
       <div style={{ maxWidth: "700px", margin: "0 auto" }}>
-        <h1 style={{ fontSize: "42px", marginBottom: "5px" }}>
+        <h1
+          style={{
+            fontSize: "42px",
+            marginBottom: "5px",
+          }}
+        >
           MARTIN
         </h1>
 
-        <p style={{ color: "#888", marginTop: 0 }}>
+        <p
+          style={{
+            color: "#888",
+            marginTop: 0,
+          }}
+        >
           OWNER CONTROL
         </p>
 
-        <h2 style={{ marginTop: "50px" }}>
-          طلبات الدخول
-        </h2>
+        <h2 style={{ marginTop: "50px" }}>طلبات الدخول</h2>
 
-        {players.length === 0 ? (
+        {loading ? (
+          <p style={{ color: "#777" }}>جاري تحميل الطلبات...</p>
+        ) : players.length === 0 ? (
           <p style={{ color: "#777" }}>لا توجد طلبات حالياً.</p>
         ) : (
           players.map((player) => (
@@ -64,10 +144,11 @@ export default function OwnerPage() {
               <h3 style={{ marginTop: 0 }}>{player.name}</h3>
 
               <p style={{ color: "#aaa" }}>
-                {player.role} — {player.status}
+                {roleText(player.requested_role)} —{" "}
+                {statusText(player.status)}
               </p>
 
-              {player.status === "بانتظار الموافقة" && (
+              {player.status === "pending" && (
                 <div
                   style={{
                     display: "flex",
