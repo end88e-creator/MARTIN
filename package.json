@@ -1,11 +1,11 @@
 {
-  "name": "martin",
+  "name": "martin-game",
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "dev": "next dev"
+    "start": "next start"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0",
