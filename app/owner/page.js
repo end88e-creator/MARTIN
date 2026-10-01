@@ -12,7 +12,6 @@ export default function OwnerPage() {
   const [session, setSession] = useState(null);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
 
   async function loadSession() {
     setLoading(true);
@@ -21,7 +20,7 @@ export default function OwnerPage() {
       .from("sessions")
       .select("*")
       .eq("room_code", "MARTIN001")
-      .eq("status", "open")
+      .eq("status", "lobby")
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -58,55 +57,16 @@ export default function OwnerPage() {
     setRequests(data || []);
   }
 
-  async function openSession() {
-    setCreating(true);
-
-    const { data, error } = await supabase
-      .from("sessions")
-      .insert({
-        room_code: "MARTIN001",
-        status: "open",
-      })
-      .select()
-      .single();
-
-    setCreating(false);
-
-    if (error) {
-      console.error("MARTIN OPEN SESSION:", error);
-      alert("تعذر فتح جلسة MARTIN.");
-      return;
-    }
-
-    setSession(data);
-    setRequests([]);
-  }
-
-  async function closeSession() {
+  async function approve(id) {
     if (!session) return;
 
-    const { error } = await supabase
-      .from("sessions")
-      .update({ status: "closed" })
-      .eq("id", session.id);
-
-    if (error) {
-      console.error(error);
-      alert("تعذر إغلاق الجلسة.");
-      return;
-    }
-
-    setSession(null);
-    setRequests([]);
-  }
-
-  async function approve(id) {
     const { error } = await supabase
       .from("join_requests")
       .update({ status: "approved" })
       .eq("id", id);
 
     if (error) {
+      console.error("MARTIN APPROVE:", error);
       alert("صار خطأ أثناء الموافقة.");
       return;
     }
@@ -115,12 +75,15 @@ export default function OwnerPage() {
   }
 
   async function reject(id) {
+    if (!session) return;
+
     const { error } = await supabase
       .from("join_requests")
       .update({ status: "rejected" })
       .eq("id", id);
 
     if (error) {
+      console.error("MARTIN REJECT:", error);
       alert("صار خطأ أثناء الرفض.");
       return;
     }
@@ -133,10 +96,10 @@ export default function OwnerPage() {
   }, []);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session?.id) return;
 
     const channel = supabase
-      .channel(`martin-${session.id}`)
+      .channel(`martin-owner-${session.id}`)
       .on(
         "postgres_changes",
         {
@@ -145,7 +108,9 @@ export default function OwnerPage() {
           table: "join_requests",
           filter: `session_id=eq.${session.id}`,
         },
-        () => loadRequests(session.id)
+        () => {
+          loadRequests(session.id);
+        }
       )
       .subscribe();
 
@@ -160,6 +125,12 @@ export default function OwnerPage() {
     return role;
   }
 
+  function statusText(status) {
+    if (status === "approved") return "✓ تمت الموافقة";
+    if (status === "rejected") return "✕ تم الرفض";
+    return "⏳ بانتظار القرار";
+  }
+
   return (
     <main
       dir="rtl"
@@ -171,44 +142,76 @@ export default function OwnerPage() {
         fontFamily: "Arial, sans-serif",
       }}
     >
-      <div style={{ maxWidth: "700px", margin: "0 auto" }}>
-        <h1 style={{ fontSize: "44px", marginBottom: "5px" }}>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "700px",
+          margin: "0 auto",
+        }}
+      >
+        <h1
+          style={{
+            fontSize: "44px",
+            marginBottom: "5px",
+          }}
+        >
           MARTIN
         </h1>
 
-        <p style={{ color: "#888", marginTop: 0 }}>
+        <p
+          style={{
+            color: "#888",
+            marginTop: 0,
+          }}
+        >
           OWNER CONTROL
         </p>
 
         {loading ? (
-          <p style={{ color: "#777", marginTop: "50px" }}>
-            جاري تحميل MARTIN...
+          <p
+            style={{
+              color: "#777",
+              marginTop: "50px",
+            }}
+          >
+            جاري الاتصال بجلسة MARTIN...
           </p>
         ) : !session ? (
-          <div style={{ marginTop: "60px" }}>
-            <h2>لا توجد جلسة مفتوحة</h2>
+          <div
+            style={{
+              marginTop: "60px",
+              padding: "22px",
+              border: "1px solid #333",
+              borderRadius: "16px",
+              background: "#101010",
+            }}
+          >
+            <h2>تعذر العثور على MARTIN001</h2>
 
-            <p style={{ color: "#888", lineHeight: 1.8 }}>
-              افتح الجلسة أولاً، وبعدها يقدر اللاعبون والمتفرجون يرسلون طلبات الدخول.
+            <p
+              style={{
+                color: "#888",
+                lineHeight: 1.8,
+              }}
+            >
+              لا توجد حالياً جلسة MARTIN001 بحالة lobby.
             </p>
 
             <button
-              onClick={openSession}
-              disabled={creating}
+              onClick={loadSession}
               style={{
                 width: "100%",
-                marginTop: "20px",
-                padding: "18px",
+                marginTop: "15px",
+                padding: "15px",
                 border: 0,
-                borderRadius: "14px",
+                borderRadius: "12px",
                 background: "white",
                 color: "black",
-                fontSize: "18px",
                 fontWeight: "bold",
                 cursor: "pointer",
               }}
             >
-              {creating ? "جاري فتح الجلسة..." : "فتح جلسة MARTIN"}
+              إعادة المحاولة
             </button>
           </div>
         ) : (
@@ -222,8 +225,13 @@ export default function OwnerPage() {
                 background: "#101010",
               }}
             >
-              <div style={{ color: "#888", fontSize: "14px" }}>
-                حالة الجلسة
+              <div
+                style={{
+                  color: "#888",
+                  fontSize: "14px",
+                }}
+              >
+                الجلسة الحالية
               </div>
 
               <div
@@ -233,33 +241,61 @@ export default function OwnerPage() {
                   fontWeight: "bold",
                 }}
               >
-                🟢 MARTIN مفتوح
+                🟢 MARTIN001
               </div>
 
-              <button
-                onClick={closeSession}
+              <div
                 style={{
-                  marginTop: "16px",
-                  padding: "10px 16px",
+                  color: "#777",
+                  marginTop: "7px",
+                }}
+              >
+                الحالة: lobby
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "15px",
+                marginTop: "40px",
+              }}
+            >
+              <h2 style={{ margin: 0 }}>
+                طلبات الدخول
+              </h2>
+
+              <button
+                onClick={() => loadRequests(session.id)}
+                style={{
+                  padding: "9px 13px",
                   borderRadius: "10px",
-                  border: "1px solid #444",
-                  background: "#151515",
+                  border: "1px solid #333",
+                  background: "#111",
                   color: "white",
                   cursor: "pointer",
                 }}
               >
-                إغلاق الجلسة
+                تحديث
               </button>
             </div>
 
-            <h2 style={{ marginTop: "45px" }}>
-              طلبات الدخول
-            </h2>
-
             {requests.length === 0 ? (
-              <p style={{ color: "#777" }}>
-                بانتظار طلبات اللاعبين...
-              </p>
+              <div
+                style={{
+                  marginTop: "20px",
+                  padding: "25px",
+                  textAlign: "center",
+                  border: "1px solid #222",
+                  borderRadius: "16px",
+                  color: "#777",
+                  background: "#0d0d0d",
+                }}
+              >
+                لا توجد طلبات دخول حالياً.
+              </div>
             ) : (
               requests.map((request) => (
                 <div
@@ -272,11 +308,22 @@ export default function OwnerPage() {
                     background: "#101010",
                   }}
                 >
-                  <h3 style={{ marginTop: 0 }}>
+                  <h3
+                    style={{
+                      marginTop: 0,
+                      marginBottom: "8px",
+                      fontSize: "22px",
+                    }}
+                  >
                     {request.name}
                   </h3>
 
-                  <p style={{ color: "#aaa" }}>
+                  <p
+                    style={{
+                      color: "#aaa",
+                      margin: "5px 0",
+                    }}
+                  >
                     {roleText(request.requested_role)}
                   </p>
 
@@ -295,11 +342,13 @@ export default function OwnerPage() {
                           padding: "14px",
                           border: 0,
                           borderRadius: "12px",
+                          background: "white",
+                          color: "black",
                           fontWeight: "bold",
                           cursor: "pointer",
                         }}
                       >
-                        موافقة
+                        ✓ موافقة
                       </button>
 
                       <button
@@ -315,14 +364,20 @@ export default function OwnerPage() {
                           cursor: "pointer",
                         }}
                       >
-                        رفض
+                        ✕ رفض
                       </button>
                     </div>
                   ) : (
-                    <p style={{ color: "#777" }}>
-                      {request.status === "approved"
-                        ? "✓ تمت الموافقة"
-                        : "✕ تم الرفض"}
+                    <p
+                      style={{
+                        color:
+                          request.status === "approved"
+                            ? "#aaa"
+                            : "#777",
+                        marginTop: "18px",
+                      }}
+                    >
+                      {statusText(request.status)}
                     </p>
                   )}
                 </div>
