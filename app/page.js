@@ -1,11 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+);
 
 export default function Home() {
   const [name, setName] = useState("");
   const [step, setStep] = useState("name");
   const [role, setRole] = useState("");
+  const [loading, setLoading] = useState(false);
 
   function enter() {
     if (!name.trim()) {
@@ -16,9 +23,58 @@ export default function Home() {
     setStep("role");
   }
 
-  function requestJoin(selectedRole) {
-    setRole(selectedRole);
-    setStep("waiting");
+  async function requestJoin(selectedRole) {
+    if (loading) return;
+
+    setLoading(true);
+
+    try {
+      const { data: session, error: sessionError } = await supabase
+        .from("sessions")
+        .select("id, entry_locked")
+        .eq("room_code", "MARTIN001")
+        .single();
+
+      if (sessionError || !session) {
+        console.error("Session error:", sessionError);
+        alert("تعذر العثور على جلسة MARTIN.");
+        setLoading(false);
+        return;
+      }
+
+      if (session.entry_locked) {
+        alert("الدخول مقفل حاليًا.");
+        setLoading(false);
+        return;
+      }
+
+      const databaseRole =
+        selectedRole === "لاعب" ? "player" : "spectator";
+
+      const { error: joinError } = await supabase
+        .from("join_requests")
+        .insert({
+          session_id: session.id,
+          name: name.trim(),
+          requested_role: databaseRole,
+          status: "pending",
+        });
+
+      if (joinError) {
+        console.error("Join request error:", joinError);
+        alert("تعذر إرسال طلب الدخول. حاول مرة ثانية.");
+        setLoading(false);
+        return;
+      }
+
+      setRole(selectedRole);
+      setStep("waiting");
+    } catch (error) {
+      console.error("Unexpected error:", error);
+      alert("حدث خطأ أثناء إرسال الطلب.");
+    }
+
+    setLoading(false);
   }
 
   return (
@@ -99,6 +155,7 @@ export default function Home() {
 
             <button
               onClick={() => requestJoin("لاعب")}
+              disabled={loading}
               style={{
                 width: "100%",
                 padding: "18px",
@@ -108,13 +165,15 @@ export default function Home() {
                 fontSize: "18px",
                 fontWeight: "bold",
                 cursor: "pointer",
+                opacity: loading ? 0.5 : 1,
               }}
             >
-              🎮 لاعب
+              {loading ? "جاري إرسال الطلب..." : "🎮 لاعب"}
             </button>
 
             <button
               onClick={() => requestJoin("متفرج")}
+              disabled={loading}
               style={{
                 width: "100%",
                 padding: "18px",
@@ -124,6 +183,7 @@ export default function Home() {
                 color: "white",
                 fontSize: "18px",
                 cursor: "pointer",
+                opacity: loading ? 0.5 : 1,
               }}
             >
               👁️ متفرج
